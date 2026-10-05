@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rekap Data Kartu BRIZZI WBP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        
+        /* Animasi Modal yang Halus */
+        .modal-overlay {
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(2px);
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            opacity: 0;
+            transform: scale(0.95) translateY(-20px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .modal-overlay.active .modal-content {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+
+        /* Pengaturan Cetak (Print) */
+        @media print {
+            body {
+                background-color: white !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            #app-container, .modal-overlay {
+                display: none !important;
+            }
+            #print-area {
+                display: block !important;
+            }
+            @page {
+                margin: 1.5cm;
+            }
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <!-- Aplikasi Utama (Disembunyikan saat cetak) -->
+    <div id="app-container" class="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-bold text-slate-900">Dashboard BRIZZI WBP</h1>
+                <p class="text-slate-500 mt-1">Sistem rekapitulasi penjualan dan top up kartu BRIZZI</p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="openModal('printModal')" class="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                    Cetak Laporan
+                </button>
+                <button onclick="openModal('inputModal')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    Input Data
+                </button>
+            </div>
+        </header>
+
+        <!-- Kartu Metrik -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Metrik 1 -->
+            <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4">
+                <div class="bg-blue-50 text-blue-600 p-4 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+                </div>
+                <div>
+                    <p class="text-sm text-slate-500 font-medium">Beli Kartu Baru & Top Up</p>
+                    <h3 class="text-2xl font-bold text-slate-800" id="stat-new-cards">0</h3>
+                </div>
+            </div>
+            
+            <!-- Metrik 2 -->
+            <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4">
+                <div class="bg-emerald-50 text-emerald-600 p-4 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                </div>
+                <div>
+                    <p class="text-sm text-slate-500 font-medium">Top Up Kartu Lama</p>
+                    <h3 class="text-2xl font-bold text-slate-800" id="stat-old-cards">0</h3>
+                </div>
+            </div>
+
+            <!-- Metrik 3 (Keuntungan) -->
+            <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4">
+                <div class="bg-amber-50 text-amber-600 p-4 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                </div>
+                <div>
+                    <p class="text-sm text-slate-500 font-medium">Keuntungan Kartu Baru</p>
+                    <h3 class="text-2xl font-bold text-slate-800" id="stat-profit">Rp 0</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabel Riwayat Data -->
+        <div class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h2 class="text-lg font-bold text-slate-800">Riwayat Transaksi</h2>
+                <button onclick="clearData()" class="text-sm text-red-500 hover:text-red-700 transition">Hapus Semua Data</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
+                            <th class="py-3 px-6 font-medium">Tanggal</th>
+                            <th class="py-3 px-6 font-medium">Nama WBP</th>
+                            <th class="py-3 px-6 font-medium">No. BRIZZI</th>
+                            <th class="py-3 px-6 font-medium">Jenis Transaksi</th>
+                            <th class="py-3 px-6 font-medium text-right">Jumlah Top Up</th>
+                            <th class="py-3 px-6 font-medium text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="text-sm text-slate-700 divide-y divide-slate-100">
+                        <!-- Data akan di-render di sini oleh JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <!-- Empty State -->
+            <div id="empty-state" class="hidden flex-col items-center justify-center p-12 text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mb-3 opacity-50"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                <p>Belum ada data transaksi.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Input Data -->
+    <div id="inputModal" class="modal-overlay fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+        <div class="modal-content bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h2 class="text-lg font-bold text-slate-800">Input Transaksi Baru</h2>
+                <button onclick="closeModal('inputModal')" class="text-slate-400 hover:text-slate-600 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <form id="transactionForm" onsubmit="handleFormSubmit(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nama WBP (Lengkap dengan Bin)</label>
+                    <input type="text" id="wbpName" required placeholder="Contoh: Budi bin Santoso" 
+                           class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nomor Kartu BRIZZI</label>
+                    <input type="number" id="brizziNumber" required placeholder="Masukkan 16 digit nomor kartu" 
+                           class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Jenis Transaksi</label>
+                    <select id="transactionType" required class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white">
+                        <option value="new">Beli Kartu Baru + Top Up</option>
+                        <option value="old">Hanya Top Up (Kartu Lama)</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Tanggal Top Up</label>
+                        <input type="text" id="topupDate" readonly 
+                               class="w-full px-4 py-2 border border-slate-200 bg-slate-50 text-slate-500 rounded-lg outline-none cursor-not-allowed">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Jumlah Top Up (Rp)</label>
+                        <input type="number" id="topupAmount" required placeholder="Contoh: 50000" min="10000"
+                               class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    </div>
+                </div>
+
+                <div class="pt-4 flex gap-3">
+                    <button type="button" onclick="closeModal('inputModal')" class="flex-1 bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 transition">Batal</button>
+                    <button type="submit" class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition">Simpan Data</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Pilihan Cetak -->
+    <div id="printModal" class="modal-overlay fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+        <div class="modal-content bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h2 class="text-lg font-bold text-slate-800">Pilih Opsi Cetak Laporan</h2>
+                <button onclick="closeModal('printModal')" class="text-slate-400 hover:text-slate-600 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <button onclick="executePrint('option1')" class="w-full text-left p-4 border border-slate-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition group">
+                    <h3 class="font-bold text-slate-800 group-hover:text-blue-700">Opsi 1: Daftar Nomor & Nama WBP</h3>
+                    <p class="text-sm text-slate-500 mt-1">Mencetak tabel sederhana berisi Nomor Kartu BRIZZI dan Nama WBP pemiliknya.</p>
+                </button>
+                
+                <button onclick="executePrint('option2')" class="w-full text-left p-4 border border-slate-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition group">
+                    <h3 class="font-bold text-slate-800 group-hover:text-blue-700">Opsi 2: Laporan Keuntungan Kartu Baru</h3>
+                    <p class="text-sm text-slate-500 mt-1">Mencetak detail transaksi kartu baru beserta total keuntungan yang didapatkan (Rp 2.500/kartu).</p>
+                </button>
+            </div>
+            <div class="p-4 border-t border-slate-100 bg-slate-50 text-right">
+                <button onclick="closeModal('printModal')" class="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-100 transition">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Area Khusus Cetak (Hanya tampil saat window.print() dipanggil) -->
+    <div id="print-area" class="hidden">
+        <!-- Konten cetak akan di-inject menggunakan JavaScript sebelum di-print -->
+    </div>
+
+    <script>
+        // --- KONFIGURASI & STATE ---
+        const PROFIT_PER_NEW_CARD = 2500;
+        let transactions = [];
+
+        // --- INISIALISASI ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            setTodayDate();
+            renderDashboard();
+        });
+
+        // --- MANAJEMEN DATA (LocalStorage) ---
+        function loadData() {
+            const savedData = localStorage.getItem('brizzi_wbp_data');
+            if (savedData) {
+                try {
+                    transactions = JSON.parse(savedData);
+                } catch (e) {
+                    console.error("Gagal memuat data", e);
+                    transactions = [];
+                }
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('brizzi_wbp_data', JSON.stringify(transactions));
+        }
+
+        function clearData() {
+            if(confirm("Apakah Anda yakin ingin menghapus SEMUA riwayat data? Aksi ini tidak dapat dibatalkan.")) {
+                transactions = [];
+                saveData();
+                renderDashboard();
+            }
+        }
+
+        function deleteTransaction(id) {
+            if(confirm("Hapus data transaksi ini?")) {
+                transactions = transactions.filter(t => t.id !== id);
+                saveData();
+                renderDashboard();
+            }
+        }
+
+        // --- UTILITAS ---
+        function setTodayDate() {
+            const today = new Date();
+            // Format DD-MM-YYYY untuk tampilan
+            const dd = String(today.getDate()).padStart(2, '0');
+            const mm = String(today.getMonth() + 1).padStart(2, '0'); // January is 0!
+            const yyyy = today.getFullYear();
+            
+            document.getElementById('topupDate').value = `${dd}-${mm}-${yyyy}`;
+        }
+
+        function formatRupiah(number) {
+            return new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                minimumFractionDigits: 0
+            }).format(number);
+        }
+
+        function formatDateDisplay(dateString) {
+            // Karena kita simpan dalam format DD-MM-YYYY dari input, kembalikan saja
+            return dateString;
+        }
+
+        // --- KONTROL MODAL ---
+        function openModal(modalId) {
+            if(modalId === 'inputModal') {
+                document.getElementById('transactionForm').reset();
+                setTodayDate();
+            }
+            document.getElementById(modalId).classList.add('active');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        // --- PENANGANAN FORM ---
+        function handleFormSubmit(event) {
+            event.preventDefault();
+            
+            const newData = {
+                id: Date.now(),
+                wbpName: document.getElementById('wbpName').value.trim(),
+                brizziNumber: document.getElementById('brizziNumber').value,
+                type: document.getElementById('transactionType').value,
+                date: document.getElementById('topupDate').value,
+                amount: parseInt(document.getElementById('topupAmount').value)
+            };
+
+            transactions.unshift(newData); // Tambah di urutan paling atas
+            saveData();
+            renderDashboard();
+            closeModal('inputModal');
+        }
+
+        // --- STREAMING_CHUNK:Fungsi Render Antarmuka... ---
+        // --- RENDER UI ---
+        function renderDashboard() {
+            let totalNew = 0;
+            let totalOld = 0;
+
+            const tbody = document.getElementById('table-body');
+            const emptyState = document.getElementById('empty-state');
+            tbody.innerHTML = '';
+
+            if (transactions.length === 0) {
+                emptyState.classList.remove('hidden');
+                emptyState.classList.add('flex');
+            } else {
+                emptyState.classList.add('hidden');
+                emptyState.classList.remove('flex');
+                
+                transactions.forEach(t => {
+                    if (t.type === 'new') totalNew++;
+                    if (t.type === 'old') totalOld++;
+
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-slate-50 transition border-b border-slate-50';
+                    row.innerHTML = `
+                        <td class="py-3 px-6">${t.date}</td>
+                        <td class="py-3 px-6 font-medium text-slate-900">${t.wbpName}</td>
+                        <td class="py-3 px-6 font-mono text-slate-600">${t.brizziNumber}</td>
+                        <td class="py-3 px-6">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                t.type === 'new' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'
+                            }">
+                                ${t.type === 'new' ? 'Kartu Baru + Top Up' : 'Top Up (Kartu Lama)'}
+                            </span>
+                        </td>
+                        <td class="py-3 px-6 text-right font-medium">${formatRupiah(t.amount)}</td>
+                        <td class="py-3 px-6 text-center">
+                            <button onclick="deleteTransaction(${t.id})" class="text-slate-400 hover:text-red-500 transition" title="Hapus Data">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+
+            // Update Metrics
+            document.getElementById('stat-new-cards').innerText = totalNew;
+            document.getElementById('stat-old-cards').innerText = totalOld;
+            
+            const totalProfit = totalNew * PROFIT_PER_NEW_CARD;
+            document.getElementById('stat-profit').innerText = formatRupiah(totalProfit);
+        }
+
+        // --- STREAMING_CHUNK:Logika Cetak Laporan (Print)... ---
+        // --- SISTEM CETAK (PRINT) ---
+        function executePrint(option) {
+            closeModal('printModal');
+            const printArea = document.getElementById('print-area');
+            const currentDate = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            
+            let printHTML = '';
+
+            // Desain Cetak Umum
+            const printHeader = `
+                <div style="text-align: center; margin-bottom: 2rem; border-bottom: 2px solid #000; padding-bottom: 1rem;">
+                    <h1 style="font-size: 24px; font-weight: bold; margin: 0;">KOPERASI / KANTIN LAPAS</h1>
+                    <h2 style="font-size: 18px; margin: 5px 0;">REKAPITULASI KARTU BRIZZI WBP</h2>
+                    <p style="font-size: 14px; margin: 0;">Tanggal Cetak: ${currentDate}</p>
+                </div>
+            `;
+
+            if (option === 'option1') {
+                // OPSI 1: Daftar Nama WBP dan No Brizzi
+                printHTML = printHeader + `
+                    <h3 style="font-size: 16px; font-weight: bold; margin-bottom: 1rem; text-align:center;">DAFTAR KEPEMILIKAN NOMOR BRIZZI WBP</h3>
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+                        <thead>
+                            <tr>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: center; width: 10%;">No.</th>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: left;">Nama WBP (Bin)</th>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: left;">Nomor Kartu BRIZZI</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${transactions.length > 0 ? transactions.map((t, index) => `
+                                <tr>
+                                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${index + 1}</td>
+                                    <td style="border: 1px solid #000; padding: 8px;">${t.wbpName}</td>
+                                    <td style="border: 1px solid #000; padding: 8px; font-family: monospace;">${t.brizziNumber}</td>
+                                </tr>
+                            `).join('') : `<tr><td colspan="3" style="border: 1px solid #000; padding: 8px; text-align: center;">Tidak ada data.</td></tr>`}
+                        </tbody>
+                    </table>
+                `;
+            } 
+            else if (option === 'option2') {
+                // OPSI 2: Laporan Keuntungan (Hanya Kartu Baru)
+                const newCardsData = transactions.filter(t => t.type === 'new');
+                const totalProfit = newCardsData.length * PROFIT_PER_NEW_CARD;
+
+                printHTML = printHeader + `
+                    <h3 style="font-size: 16px; font-weight: bold; margin-bottom: 1rem; text-align:center;">LAPORAN KEUNTUNGAN PENJUALAN KARTU BRIZZI BARU</h3>
+                    
+                    <div style="margin-bottom: 1.5rem;">
+                        <p style="margin: 4px 0;"><strong>Total Kartu Baru Terjual:</strong> ${newCardsData.length} Kartu</p>
+                        <p style="margin: 4px 0;"><strong>Keuntungan per Kartu:</strong> Rp 2.500</p>
+                        <p style="margin: 4px 0; font-size: 18px;"><strong>Total Keuntungan: <span style="text-decoration: underline;">${formatRupiah(totalProfit)}</span></strong></p>
+                    </div>
+
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: center; width: 10%;">No.</th>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: left;">Tanggal</th>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: left;">Nama WBP</th>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: right;">Top Up Awal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${newCardsData.length > 0 ? newCardsData.map((t, index) => `
+                                <tr>
+                                    <td style="border: 1px solid #000; padding: 8px; text-align: center;">${index + 1}</td>
+                                    <td style="border: 1px solid #000; padding: 8px;">${t.date}</td>
+                                    <td style="border: 1px solid #000; padding: 8px;">${t.wbpName}</td>
+                                    <td style="border: 1px solid #000; padding: 8px; text-align: right;">${formatRupiah(t.amount)}</td>
+                                </tr>
+                            `).join('') : `<tr><td colspan="4" style="border: 1px solid #000; padding: 8px; text-align: center;">Tidak ada transaksi penjualan kartu baru.</td></tr>`}
+                        </tbody>
+                    </table>
+                `;
+            }
+
+            printArea.innerHTML = printHTML;
+
+            // Beri jeda sedikit agar DOM update sebelum print
+            setTimeout(() => {
+                window.print();
+            }, 300);
+        }
+    </script>
+</body>
+</html>
