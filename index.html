@@ -223,9 +223,16 @@
                 </div>
                 <p id="topupHelper" class="text-xs text-slate-500 mt-1">Ketik nominal uang diserahkan untuk menghitung top up.</p>
 
-                <div class="pt-4 flex gap-3">
-                    <button type="button" onclick="closeModal('inputModal')" class="flex-1 bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 transition">Batal</button>
-                    <button type="submit" class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition">Simpan Database</button>
+                <div class="pt-4 flex flex-col gap-3">
+                    <div class="flex gap-3">
+                        <button type="button" onclick="closeModal('inputModal')" class="flex-1 bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 transition">Batal</button>
+                        <button type="submit" class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition">Simpan Database</button>
+                    </div>
+                    <!-- Tombol WhatsApp Operator Qlola -->
+                    <button type="button" onclick="kirimWAQlola()" class="w-full bg-[#25D366] hover:bg-[#1ebd5c] text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                        Kirim Pesan ke Operator Qlola
+                    </button>
                 </div>
             </form>
         </div>
@@ -409,7 +416,30 @@
                 helperText.innerHTML = `<span class="text-emerald-600 font-medium">100% uang diserahkan masuk ke saldo Top Up</span>`;
             }
         }
+        // --- FITUR WHATSAPP OPERATOR QLOLA ---
+        function kirimWAQlola() {
+            const noBrizzi = document.getElementById('nomorBrizzi').value.trim();
+            const topUpBersih = document.getElementById('jumlahTopUp').value;
 
+            // Pastikan Nomor BRIZZI dan Nominal Uang sudah diisi
+            if (!noBrizzi || !topUpBersih) {
+                alert("Pastikan Nomor BRIZZI dan Uang Diserahkan sudah terisi sebelum mengirim pesan!");
+                return;
+            }
+
+            // Format Pesan sesuai request
+            const pesan = `${noBrizzi} - ${topUpBersih} - link Konfirmasi jika sudah di Top Up`;
+            
+            // Encode teks menjadi format URL yang didukung WhatsApp
+            const encodedPesan = encodeURIComponent(pesan);
+            
+            // Nomor WhatsApp tujuan (085161461729 diubah ke format internasional 62...)
+            const nomorWA = "6285161461729";
+            
+            // Membuka tab baru yang mengarah langsung ke chat WhatsApp
+            const waURL = `https://wa.me/${nomorWA}?text=${encodedPesan}`;
+            window.open(waURL, '_blank');
+        }
         // --- MANAJEMEN DATABASE ---
         async function fetchDataFromSupabase() {
             document.getElementById('table-loader').classList.remove('hidden');
