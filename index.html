@@ -191,10 +191,14 @@
                     </select>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Nama WBP (Lengkap dengan Bin)</label>
-                    <input type="text" id="namaWbp" required placeholder="Contoh: Budi bin Santoso" 
-                           class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                <div class="relative">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nama WBP / Pencarian Kartu</label>
+                    <input type="text" id="namaWbp" oninput="cariDataWbp()" autocomplete="off" required placeholder="Contoh: Budi bin Santoso" 
+                           class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white relative z-10">
+                    
+                    <!-- Kotak Dropdown Sugesti Pencarian -->
+                    <ul id="sugestiWbp" class="hidden absolute z-20 left-0 right-0 bg-white border border-slate-200 mt-1 rounded-lg shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
+                    </ul>
                 </div>
                 
                 <div>
@@ -401,6 +405,18 @@
         // --- LOGIKA HITUNGAN TOP UP OTOMATIS ---
         function calculateTopUp() {
             const jenis = document.getElementById('jenisTransaksi').value;
+            
+            // Mengubah instruksi placeholder sesuai jenis transaksi
+            const inputNama = document.getElementById('namaWbp');
+            if (jenis === 'lama') {
+                inputNama.placeholder = "Ketik Nama atau No Kartu untuk mencari...";
+            } else {
+                inputNama.placeholder = "Contoh: Budi bin Santoso";
+            }
+
+            const nominalInput = document.getElementById('nominalUang').value;
+            const nominal = nominalInput ? parseInt(nominalInput) : 0;
+            // ... (kode di bawahnya biarkan sama seperti aslinya)    
             const nominalInput = document.getElementById('nominalUang').value;
             const nominal = nominalInput ? parseInt(nominalInput) : 0;
             
@@ -440,6 +456,67 @@
             const waURL = `https://wa.me/${nomorWA}?text=${encodedPesan}`;
             window.open(waURL, '_blank');
         }
+        // --- FITUR PENCARIAN WBP OTOMATIS (AUTO-COMPLETE) ---
+        function cariDataWbp() {
+            const input = document.getElementById('namaWbp').value.toLowerCase();
+            const sugestiBox = document.getElementById('sugestiWbp');
+            sugestiBox.innerHTML = '';
+
+            // Sembunyikan sugesti jika ketikan kurang dari 2 huruf
+            if (input.length < 2) {
+                sugestiBox.classList.add('hidden');
+                return;
+            }
+
+            // Ambil daftar unik WBP dan Nomor Kartu dari riwayat transaksi yang ada
+            const uniqueData = [];
+            const map = new Map();
+            transactions.forEach(t => {
+                if (t.nomor_brizzi && !map.has(t.nomor_brizzi)) {
+                    map.set(t.nomor_brizzi, true);
+                    uniqueData.push({ nama: t.nama_wbp, nomor: t.nomor_brizzi });
+                }
+            });
+
+            // Filter data yang cocok dengan Nama atau Nomor Kartu yang diketik
+            const filtered = uniqueData.filter(item => 
+                item.nama.toLowerCase().includes(input) || 
+                item.nomor.includes(input)
+            );
+
+            // Tampilkan hasil pencarian di dropdown
+            if (filtered.length > 0) {
+                sugestiBox.classList.remove('hidden');
+                filtered.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'px-4 py-2 hover:bg-blue-50 cursor-pointer transition';
+                    li.innerHTML = `
+                        <div class="font-medium text-sm text-slate-800">${item.nama}</div>
+                        <div class="text-xs text-slate-500 font-mono mt-0.5">${item.nomor}</div>
+                    `;
+                    // Jika diklik, otomatis mengisi form Nama dan Nomor BRIZZI
+                    li.onclick = () => pilihWbp(item.nama, item.nomor);
+                    sugestiBox.appendChild(li);
+                });
+            } else {
+                sugestiBox.classList.add('hidden');
+            }
+        }
+
+        function pilihWbp(nama, nomor) {
+            document.getElementById('namaWbp').value = nama;
+            document.getElementById('nomorBrizzi').value = nomor;
+            document.getElementById('sugestiWbp').classList.add('hidden');
+        }
+
+        // Sembunyikan dropdown jika petugas mengklik area di luar kotak pencarian
+        document.addEventListener('click', function(event) {
+            const sugestiBox = document.getElementById('sugestiWbp');
+            const inputNama = document.getElementById('namaWbp');
+            if (sugestiBox && !inputNama.contains(event.target) && !sugestiBox.contains(event.target)) {
+                sugestiBox.classList.add('hidden');
+            }
+        });
         // --- MANAJEMEN DATABASE ---
         async function fetchDataFromSupabase() {
             document.getElementById('table-loader').classList.remove('hidden');
