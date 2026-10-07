@@ -312,464 +312,455 @@
 
     <script>
         // Default Supabase Config
-        let SUPABASE_URL = localStorage.getItem('sb_url') || 'https://nlopsarxqkbqqrbcajcw.supabase.co';
-        let SUPABASE_KEY = localStorage.getItem('sb_key') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sb3BzYXJ4cWticXFyYmNhamN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExNjM3NDgsImV4cCI6MjEwNjczOTc0OH0.D0COG-juMiRN_i3XjGIPIlsXOkrIgWkid1vEPpVMjHI';
-        
-        // Inisialisasi Klien Supabase secara aman
-        let _supabase = null;
+let SUPABASE_URL = localStorage.getItem('sb_url') || 'https://nlopsarxqkbqqrbcajcw.supabase.co';
+let SUPABASE_KEY = localStorage.getItem('sb_key') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sb3BzYXJ4cWticXFyYmNhamN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExNjM3NDgsImV4cCI6MjEwNjczOTc0OH0.D0COG-juMiRN_i3XjGIPIlsXOkrIgWkid1vEPpVMjHI';
 
-        function getSupabaseClient() {
-            if (_supabase) return _supabase;
-            if (!SUPABASE_URL || !SUPABASE_KEY) return null;
-            
-            try {
-                if (SUPABASE_URL.startsWith('http://') || SUPABASE_URL.startsWith('https://')) {
-                    const { createClient } = window.supabase || {};
-                    if (createClient) {
-                        _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-                        return _supabase;
-                    }
-                }
-            } catch (err) {
-                console.warn("Format URL Supabase belum valid:", err.message);
+// Inisialisasi Klien Supabase secara aman
+let _supabase = null;
+
+function getSupabaseClient() {
+    if (_supabase) return _supabase;
+    if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+    
+    try {
+        if (SUPABASE_URL.startsWith('http://') || SUPABASE_URL.startsWith('https://')) {
+            const { createClient } = window.supabase || {};
+            if (createClient) {
+                _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+                return _supabase;
             }
-            return null;
+        }
+    } catch (err) {
+        console.warn("Format URL Supabase belum valid:", err.message);
+    }
+    return null;
+}
+
+// State Global Aplikasi
+let transactions = JSON.parse(localStorage.getItem('brizzi_local_backup') || '[]');
+
+// Konstanta Harga
+const HARGA_JUAL_KARTU = 27500;
+const HARGA_SETOR_KARTU_BRI = 25000;
+const KEUNTUNGAN_PER_KARTU = HARGA_JUAL_KARTU - HARGA_SETOR_KARTU_BRI; // Rp 2.500
+const BIAYA_ADMIN_KARTU_LAMA = 2500; // Biaya Admin Kartu Lama
+
+// Saat halaman dimuat
+document.addEventListener('DOMContentLoaded', () => {
+    setTodayDate();
+    
+    if (SUPABASE_URL) document.getElementById('sbUrlInput').value = SUPABASE_URL;
+    if (SUPABASE_KEY) document.getElementById('sbKeyInput').value = SUPABASE_KEY;
+
+    fetchDataFromSupabase();
+    setupRealtimeSubscription();
+});
+
+function saveSupabaseSettings(e) {
+    e.preventDefault();
+    const url = document.getElementById('sbUrlInput').value.trim();
+    const key = document.getElementById('sbKeyInput').value.trim();
+
+    localStorage.setItem('sb_url', url);
+    localStorage.setItem('sb_key', key);
+    SUPABASE_URL = url;
+    SUPABASE_KEY = key;
+    _supabase = null; // Reset client
+
+    closeModal('configModal');
+    fetchDataFromSupabase();
+    setupRealtimeSubscription();
+}
+
+// --- MANAJEMEN UI & MODAL ---
+function setTodayDate() {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    
+    document.getElementById('tanggalTopUp').value = `${yyyy}-${mm}-${dd}`;
+}
+
+function formatRupiah(number) {
+    return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0
+    }).format(number);
+}
+
+function openModal(modalId) {
+    if(modalId === 'inputModal') {
+        document.getElementById('transactionForm').reset();
+        setTodayDate();
+        calculateTopUp(); // Reset calculation display
+    }
+    document.getElementById(modalId).classList.add('active');
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+// --- LOGIKA HITUNGAN TOP UP OTOMATIS ---
+function calculateTopUp() {
+    const jenis = document.getElementById('jenisTransaksi').value;
+    
+    const inputNama = document.getElementById('namaWbp');
+    if (jenis === 'lama') {
+        inputNama.placeholder = "Ketik Nama atau No Kartu untuk mencari...";
+    } else {
+        inputNama.placeholder = "Contoh: Budi bin Santoso";
+    }
+
+    const nominalInput = document.getElementById('nominalUang').value;
+    const nominal = nominalInput ? parseInt(nominalInput) : 0;
+    
+    const inputTopUp = document.getElementById('jumlahTopUp');
+    const helperText = document.getElementById('topupHelper');
+
+    if (jenis === 'baru') {
+        const topupBersih = nominal - HARGA_JUAL_KARTU;
+        inputTopUp.value = topupBersih > 0 ? topupBersih : 0;
+        helperText.innerHTML = `<span class="text-blue-600 font-medium">Uang Rp ${nominal.toLocaleString('id-ID')} - Harga Kartu Rp 27.500</span>`;
+    } else {
+        const topupBersih = nominal - BIAYA_ADMIN_KARTU_LAMA;
+        inputTopUp.value = topupBersih > 0 ? topupBersih : 0;
+        helperText.innerHTML = `<span class="text-amber-600 font-medium">Uang Rp ${nominal.toLocaleString('id-ID')} - Biaya Admin Rp 2.500</span>`;
+    }
+}
+
+// --- FITUR WHATSAPP OPERATOR QLOLA ---
+function kirimWAQlola() {
+    const noBrizzi = document.getElementById('nomorBrizzi').value.trim();
+    const topUpBersih = document.getElementById('jumlahTopUp').value;
+
+    if (!noBrizzi || !topUpBersih) {
+        alert("Pastikan Nomor BRIZZI dan Uang Diserahkan sudah terisi sebelum mengirim pesan!");
+        return;
+    }
+
+    const pesan = `${noBrizzi} - ${topUpBersih}`;
+    const encodedPesan = encodeURIComponent(pesan);
+    const nomorWA = "6285161461729";
+    const waURL = `https://wa.me/${nomorWA}?text=${encodedPesan}`;
+    window.open(waURL, '_blank');
+}
+
+// --- FITUR PENCARIAN WBP OTOMATIS (AUTO-COMPLETE) ---
+function cariDataWbp() {
+    const input = document.getElementById('namaWbp').value.toLowerCase();
+    const sugestiBox = document.getElementById('sugestiWbp');
+    sugestiBox.innerHTML = '';
+
+    if (input.length < 2) {
+        sugestiBox.classList.add('hidden');
+        return;
+    }
+
+    const uniqueData = [];
+    const map = new Map();
+    transactions.forEach(t => {
+        if (t.nomor_brizzi && !map.has(t.nomor_brizzi)) {
+            map.set(t.nomor_brizzi, true);
+            uniqueData.push({ nama: t.nama_wbp, nomor: t.nomor_brizzi });
+        }
+    });
+
+    const filtered = uniqueData.filter(item => 
+        item.nama.toLowerCase().includes(input) || 
+        item.nomor.includes(input)
+    );
+
+    if (filtered.length > 0) {
+        sugestiBox.classList.remove('hidden');
+        filtered.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'px-4 py-2 hover:bg-blue-50 cursor-pointer transition';
+            li.innerHTML = `
+                <div class="font-medium text-sm text-slate-800">${item.nama}</div>
+                <div class="text-xs text-slate-500 font-mono mt-0.5">${item.nomor}</div>
+            `;
+            li.onclick = () => pilihWbp(item.nama, item.nomor);
+            sugestiBox.appendChild(li);
+        });
+    } else {
+        sugestiBox.classList.add('hidden');
+    }
+}
+
+function pilihWbp(nama, nomor) {
+    document.getElementById('namaWbp').value = nama;
+    document.getElementById('nomorBrizzi').value = nomor;
+    document.getElementById('sugestiWbp').classList.add('hidden');
+}
+
+document.addEventListener('click', function(event) {
+    const sugestiBox = document.getElementById('sugestiWbp');
+    const inputNama = document.getElementById('namaWbp');
+    if (sugestiBox && !inputNama.contains(event.target) && !sugestiBox.contains(event.target)) {
+        sugestiBox.classList.add('hidden');
+    }
+});
+
+// --- MANAJEMEN DATABASE ---
+async function fetchDataFromSupabase() {
+    document.getElementById('table-loader').classList.remove('hidden');
+    const client = getSupabaseClient();
+    
+    try {
+        if (!client) {
+            updateConnectionBadge(false, "Local Mode");
+            renderDashboard();
+            return;
         }
 
-        // State Global Aplikasi
-        let transactions = JSON.parse(localStorage.getItem('brizzi_local_backup') || '[]');
+        const { data, error } = await client
+            .from('brizzi_transactions')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
         
-        // Konstanta Harga
-        const HARGA_JUAL_KARTU = 27500;
-        const HARGA_SETOR_KARTU_BRI = 25000;
-        const KEUNTUNGAN_PER_KARTU = HARGA_JUAL_KARTU - HARGA_SETOR_KARTU_BRI; // Rp 2.500
+        transactions = data || [];
+        localStorage.setItem('brizzi_local_backup', JSON.stringify(transactions));
+        updateConnectionBadge(true, "Live Supabase");
+        renderDashboard();
+    } catch (error) {
+        console.error("Gagal mengambil data:", error.message);
+        updateConnectionBadge(false, "Offline/Error");
+        renderDashboard();
+    } finally {
+        document.getElementById('table-loader').classList.add('hidden');
+    }
+}
 
-        // Saat halaman dimuat
-        document.addEventListener('DOMContentLoaded', () => {
-            setTodayDate();
-            
-            if (SUPABASE_URL) document.getElementById('sbUrlInput').value = SUPABASE_URL;
-            if (SUPABASE_KEY) document.getElementById('sbKeyInput').value = SUPABASE_KEY;
+function updateConnectionBadge(isConnected, text) {
+    const badge = document.getElementById('connection-status');
+    if (isConnected) {
+        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> ${text}`;
+        badge.className = "flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full";
+    } else {
+        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> ${text}`;
+        badge.className = "flex items-center gap-2 text-xs font-medium text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full";
+    }
+}
 
-            fetchDataFromSupabase();
-            setupRealtimeSubscription();
+async function handleFormSubmit(event) {
+    event.preventDefault();
+    
+    const jenis_transaksi = document.getElementById('jenisTransaksi').value;
+    const nominal = parseInt(document.getElementById('nominalUang').value);
+    
+    if (jenis_transaksi === 'baru' && nominal < HARGA_JUAL_KARTU) {
+        alert(`Untuk kartu baru, uang yang diserahkan minimal Rp ${HARGA_JUAL_KARTU.toLocaleString('id-ID')}`);
+        return;
+    }
+
+    if (jenis_transaksi === 'lama' && nominal < BIAYA_ADMIN_KARTU_LAMA) {
+        alert(`Untuk kartu lama, uang yang diserahkan minimal Rp ${BIAYA_ADMIN_KARTU_LAMA.toLocaleString('id-ID')}`);
+        return;
+    }
+
+    const btnSubmit = document.querySelector('#transactionForm button[type="submit"]');
+    btnSubmit.disabled = true;
+    document.getElementById('form-loader').classList.remove('hidden');
+
+    const nama_wbp = document.getElementById('namaWbp').value.trim();
+    const nomor_brizzi = document.getElementById('nomorBrizzi').value.trim();
+    const tanggal = document.getElementById('tanggalTopUp').value;
+    
+    const jumlah_top_up = jenis_transaksi === 'baru' 
+        ? (nominal - HARGA_JUAL_KARTU > 0 ? nominal - HARGA_JUAL_KARTU : 0)
+        : (nominal - BIAYA_ADMIN_KARTU_LAMA > 0 ? nominal - BIAYA_ADMIN_KARTU_LAMA : 0);
+
+    const keuntungan_kartu = jenis_transaksi === 'baru' ? KEUNTUNGAN_PER_KARTU : BIAYA_ADMIN_KARTU_LAMA;
+
+    const insertData = {
+        nama_wbp,
+        nomor_brizzi,
+        jenis_transaksi,
+        tanggal,
+        jumlah_top_up,
+        keuntungan_kartu
+    };
+
+    const client = getSupabaseClient();
+
+    try {
+        if (!client) {
+            insertData.id = Date.now();
+            transactions.unshift(insertData);
+            localStorage.setItem('brizzi_local_backup', JSON.stringify(transactions));
+            renderDashboard();
+        } else {
+            const { data, error } = await client
+                .from('brizzi_transactions')
+                .insert([insertData]);
+
+            if (error) throw error;
+            await fetchDataFromSupabase();
+        }
+        closeModal('inputModal');
+    } catch (error) {
+        console.error("Gagal menyimpan:", error.message);
+        alert("Error: " + error.message);
+    } finally {
+        btnSubmit.disabled = false;
+        document.getElementById('form-loader').classList.add('hidden');
+    }
+}
+
+function setupRealtimeSubscription() {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+        client.channel('custom-all-channel')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'brizzi_transactions' }, (payload) => {
+                fetchDataFromSupabase();
+            })
+            .subscribe();
+    } catch(e) {}
+}
+
+// --- RENDER ANTARMUKA ---
+function renderDashboard() {
+    let totalKartuTerjual = 0;
+    let totalTopUpBersih = 0;
+    let totalKeuntungan = 0;
+
+    const tbody = document.getElementById('table-body');
+    const emptyState = document.getElementById('empty-state');
+    tbody.innerHTML = '';
+
+    if (transactions.length === 0) {
+        emptyState.classList.remove('hidden');
+        emptyState.classList.add('flex');
+    } else {
+        emptyState.classList.add('hidden');
+        emptyState.classList.remove('flex');
+        
+        transactions.forEach(t => {
+            if (t.jenis_transaksi === 'baru') {
+                totalKartuTerjual++;
+            }
+            totalTopUpBersih += Number(t.jumlah_top_up || 0);
+            totalKeuntungan += Number(t.keuntungan_kartu || 0);
+
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-slate-50 transition border-b border-slate-50';
+            row.innerHTML = `
+                <td class="py-4 px-6">${t.tanggal}</td>
+                <td class="py-4 px-6 font-medium text-slate-900">${t.nama_wbp}</td>
+                <td class="py-4 px-6 font-mono text-slate-600 tracking-wide">${t.nomor_brizzi}</td>
+                <td class="py-4 px-6">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        t.jenis_transaksi === 'baru' ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    }">
+                        ${t.jenis_transaksi === 'baru' ? 'Kartu Baru' : 'Top Up Lama'}
+                    </span>
+                </td>
+                <td class="py-4 px-6 text-right font-medium">${formatRupiah(t.jumlah_top_up)}</td>
+                <td class="py-4 px-6 text-right text-emerald-600 font-medium">+${formatRupiah(t.keuntungan_kartu || 0)}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    document.getElementById('stat-kartu-terjual').innerText = totalKartuTerjual;
+    document.getElementById('stat-total-topup').innerText = formatRupiah(totalTopUpBersih);
+    document.getElementById('stat-profit').innerText = formatRupiah(totalKeuntungan);
+}
+
+// --- SISTEM CETAK PDF ---
+function generatePDF(reportType) {
+    closeModal('printModal');
+    
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const currentDate = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("KOPERASI / KANTIN LAPAS", 105, 15, { align: "center" });
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Tanggal Cetak: ${currentDate}`, 105, 22, { align: "center" });
+    doc.setLineWidth(0.5);
+    doc.line(14, 26, 196, 26);
+
+    if (reportType === 'report1') {
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("DAFTAR KEPEMILIKAN NOMOR BRIZZI WBP", 105, 35, { align: "center" });
+
+        const tableData = transactions.map((t, index) => [
+            index + 1, t.nama_wbp, t.nomor_brizzi, t.jenis_transaksi === 'baru' ? 'Beli Baru' : 'Lama'
+        ]);
+
+        doc.autoTable({
+            startY: 40,
+            head: [['No.', 'Nama WBP (Bin)', 'Nomor Kartu BRIZZI', 'Keterangan']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [41, 128, 185], halign: 'center' }
         });
 
-        function saveSupabaseSettings(e) {
-            e.preventDefault();
-            const url = document.getElementById('sbUrlInput').value.trim();
-            const key = document.getElementById('sbKeyInput').value.trim();
+        doc.save('Daftar_Nomor_BRIZZI_WBP.pdf');
 
-            localStorage.setItem('sb_url', url);
-            localStorage.setItem('sb_key', key);
-            SUPABASE_URL = url;
-            SUPABASE_KEY = key;
-            _supabase = null; // Reset client
+    } else if (reportType === 'report2') {
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("LAPORAN KEUANGAN TRANSAKSI BRIZZI", 105, 35, { align: "center" });
 
-            closeModal('configModal');
-            fetchDataFromSupabase();
-            setupRealtimeSubscription();
-        }
+        let totalKartuTerjual = 0;
+        let totalTopUpBersih = 0;
+        let totalKeuntunganKoperasi = 0;
 
-        // --- MANAJEMEN UI & MODAL ---
-        function setTodayDate() {
-            const today = new Date();
-            const yyyy = today.getFullYear();
-            const mm = String(today.getMonth() + 1).padStart(2, '0');
-            const dd = String(today.getDate()).padStart(2, '0');
-            
-            document.getElementById('tanggalTopUp').value = `${yyyy}-${mm}-${dd}`;
-        }
-
-        function formatRupiah(number) {
-            return new Intl.NumberFormat('id-ID', {
-                style: 'currency',
-                currency: 'IDR',
-                minimumFractionDigits: 0
-            }).format(number);
-        }
-
-        function openModal(modalId) {
-            if(modalId === 'inputModal') {
-                document.getElementById('transactionForm').reset();
-                setTodayDate();
-                calculateTopUp(); // Reset calculation display
-            }
-            document.getElementById(modalId).classList.add('active');
-        }
-
-        function closeModal(modalId) {
-            document.getElementById(modalId).classList.remove('active');
-        }
-
-        // --- LOGIKA HITUNGAN TOP UP OTOMATIS ---
-        function calculateTopUp() {
-            const jenis = document.getElementById('jenisTransaksi').value;
-            
-            // Mengubah instruksi placeholder sesuai jenis transaksi
-            const inputNama = document.getElementById('namaWbp');
-            if (jenis === 'lama') {
-                inputNama.placeholder = "Ketik Nama atau No Kartu untuk mencari...";
-            } else {
-                inputNama.placeholder = "Contoh: Budi bin Santoso";
-            }
-
-            // MENGHAPUS DEKLARASI GANDA (Sudah diperbaiki)
-            const nominalInput = document.getElementById('nominalUang').value;
-            const nominal = nominalInput ? parseInt(nominalInput) : 0;
-            
-            const inputTopUp = document.getElementById('jumlahTopUp');
-            const helperText = document.getElementById('topupHelper');
-
-            if (jenis === 'baru') {
-                const topupBersih = nominal - HARGA_JUAL_KARTU;
-                inputTopUp.value = topupBersih > 0 ? topupBersih : 0;
-                helperText.innerHTML = `<span class="text-blue-600 font-medium">Uang Rp ${nominal.toLocaleString('id-ID')} - Harga Kartu Rp 27.500</span>`;
-            } else {
-                inputTopUp.value = nominal;
-                helperText.innerHTML = `<span class="text-emerald-600 font-medium">100% uang diserahkan masuk ke saldo Top Up</span>`;
-            }
-        }
-
-        // --- FITUR WHATSAPP OPERATOR QLOLA ---
-        function kirimWAQlola() {
-            const noBrizzi = document.getElementById('nomorBrizzi').value.trim();
-            const topUpBersih = document.getElementById('jumlahTopUp').value;
-
-            // Pastikan Nomor BRIZZI dan Nominal Uang sudah diisi
-            if (!noBrizzi || !topUpBersih) {
-                alert("Pastikan Nomor BRIZZI dan Uang Diserahkan sudah terisi sebelum mengirim pesan!");
-                return;
-            }
-
-            // Format Pesan sesuai request
-            const pesan = `${noBrizzi} - ${topUpBersih}`;
-            
-            // Encode teks menjadi format URL yang didukung WhatsApp
-            const encodedPesan = encodeURIComponent(pesan);
-            
-            // Nomor WhatsApp tujuan (085161461729 diubah ke format internasional 62...)
-            const nomorWA = "6285161461729";
-            
-            // Membuka tab baru yang mengarah langsung ke chat WhatsApp
-            const waURL = `https://wa.me/${nomorWA}?text=${encodedPesan}`;
-            window.open(waURL, '_blank');
-        }
-
-        // --- FITUR PENCARIAN WBP OTOMATIS (AUTO-COMPLETE) ---
-        function cariDataWbp() {
-            const input = document.getElementById('namaWbp').value.toLowerCase();
-            const sugestiBox = document.getElementById('sugestiWbp');
-            sugestiBox.innerHTML = '';
-
-            // Sembunyikan sugesti jika ketikan kurang dari 2 huruf
-            if (input.length < 2) {
-                sugestiBox.classList.add('hidden');
-                return;
-            }
-
-            // Ambil daftar unik WBP dan Nomor Kartu dari riwayat transaksi yang ada
-            const uniqueData = [];
-            const map = new Map();
-            transactions.forEach(t => {
-                if (t.nomor_brizzi && !map.has(t.nomor_brizzi)) {
-                    map.set(t.nomor_brizzi, true);
-                    uniqueData.push({ nama: t.nama_wbp, nomor: t.nomor_brizzi });
-                }
-            });
-
-            // Filter data yang cocok dengan Nama atau Nomor Kartu yang diketik
-            const filtered = uniqueData.filter(item => 
-                item.nama.toLowerCase().includes(input) || 
-                item.nomor.includes(input)
-            );
-
-            // Tampilkan hasil pencarian di dropdown
-            if (filtered.length > 0) {
-                sugestiBox.classList.remove('hidden');
-                filtered.forEach(item => {
-                    const li = document.createElement('li');
-                    li.className = 'px-4 py-2 hover:bg-blue-50 cursor-pointer transition';
-                    li.innerHTML = `
-                        <div class="font-medium text-sm text-slate-800">${item.nama}</div>
-                        <div class="text-xs text-slate-500 font-mono mt-0.5">${item.nomor}</div>
-                    `;
-                    // Jika diklik, otomatis mengisi form Nama dan Nomor BRIZZI
-                    li.onclick = () => pilihWbp(item.nama, item.nomor);
-                    sugestiBox.appendChild(li);
-                });
-            } else {
-                sugestiBox.classList.add('hidden');
-            }
-        }
-
-        function pilihWbp(nama, nomor) {
-            document.getElementById('namaWbp').value = nama;
-            document.getElementById('nomorBrizzi').value = nomor;
-            document.getElementById('sugestiWbp').classList.add('hidden');
-        }
-
-        // Sembunyikan dropdown jika petugas mengklik area di luar kotak pencarian
-        document.addEventListener('click', function(event) {
-            const sugestiBox = document.getElementById('sugestiWbp');
-            const inputNama = document.getElementById('namaWbp');
-            if (sugestiBox && !inputNama.contains(event.target) && !sugestiBox.contains(event.target)) {
-                sugestiBox.classList.add('hidden');
-            }
+        transactions.forEach(t => {
+            if (t.jenis_transaksi === 'baru') totalKartuTerjual++;
+            totalTopUpBersih += Number(t.jumlah_top_up || 0);
+            totalKeuntunganKoperasi += Number(t.keuntungan_kartu || 0);
         });
 
-        // --- MANAJEMEN DATABASE ---
-        async function fetchDataFromSupabase() {
-            document.getElementById('table-loader').classList.remove('hidden');
-            const client = getSupabaseClient();
-            
-            try {
-                if (!client) {
-                    updateConnectionBadge(false, "Local Mode");
-                    renderDashboard();
-                    return;
-                }
+        const totalBiayaModalKartu = totalKartuTerjual * HARGA_SETOR_KARTU_BRI; 
+        const grandTotalSetorBRI = totalBiayaModalKartu + totalTopUpBersih;
 
-                const { data, error } = await client
-                    .from('brizzi_transactions')
-                    .select('*')
-                    .order('created_at', { ascending: false });
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "normal");
+        doc.text(`A. Jumlah Kartu Baru Terjual: ${totalKartuTerjual} Kartu`, 14, 45);
+        doc.text(`B. Total Top Up Bersih (Masuk ke Saldo): ${formatRupiah(totalTopUpBersih)}`, 14, 52);
+        
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(39, 174, 96);
+        doc.text(`=> TOTAL KEUNTUNGAN KOPERASI: ${formatRupiah(totalKeuntunganKoperasi)}`, 14, 62);
+        
+        doc.setTextColor(41, 128, 185);
+        doc.text(`=> TOTAL SETOR KE BANK BRI: ${formatRupiah(grandTotalSetorBRI)}`, 14, 69);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.text(`   (Rincian Setor: Modal Kartu Rp ${totalBiayaModalKartu.toLocaleString('id-ID')} + Top Up Rp ${totalTopUpBersih.toLocaleString('id-ID')})`, 14, 75);
 
-                if (error) throw error;
-                
-                transactions = data || [];
-                localStorage.setItem('brizzi_local_backup', JSON.stringify(transactions));
-                updateConnectionBadge(true, "Live Supabase");
-                renderDashboard();
-            } catch (error) {
-                console.error("Gagal mengambil data:", error.message);
-                updateConnectionBadge(false, "Offline/Error");
-                renderDashboard();
-            } finally {
-                document.getElementById('table-loader').classList.add('hidden');
-            }
-        }
+        doc.setTextColor(0, 0, 0);
 
-        function updateConnectionBadge(isConnected, text) {
-            const badge = document.getElementById('connection-status');
-            if (isConnected) {
-                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> ${text}`;
-                badge.className = "flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full";
-            } else {
-                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> ${text}`;
-                badge.className = "flex items-center gap-2 text-xs font-medium text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full";
-            }
-        }
+        const tableData = transactions.map((t, index) => [
+            index + 1, t.tanggal, t.nama_wbp, t.jenis_transaksi === 'baru' ? 'Baru' : 'Lama',
+            formatRupiah(t.jumlah_top_up), formatRupiah(t.keuntungan_kartu || 0)
+        ]);
 
-        async function handleFormSubmit(event) {
-            event.preventDefault();
-            
-            const jenis_transaksi = document.getElementById('jenisTransaksi').value;
-            const nominal = parseInt(document.getElementById('nominalUang').value);
-            
-            // Validasi: Pembelian kartu baru minimal uang 27.500
-            if (jenis_transaksi === 'baru' && nominal < HARGA_JUAL_KARTU) {
-                alert(`Untuk kartu baru, uang yang diserahkan minimal Rp ${HARGA_JUAL_KARTU.toLocaleString('id-ID')}`);
-                return;
-            }
+        doc.autoTable({
+            startY: 85,
+            head: [['No.', 'Tanggal', 'Nama WBP', 'Jenis', 'Top Up Bersih', 'Untung Koperasi']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [44, 62, 80], halign: 'center' },
+            columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' } }
+        });
 
-            const btnSubmit = document.querySelector('#transactionForm button[type="submit"]');
-            btnSubmit.disabled = true;
-            document.getElementById('form-loader').classList.remove('hidden');
-
-            const nama_wbp = document.getElementById('namaWbp').value.trim();
-            const nomor_brizzi = document.getElementById('nomorBrizzi').value.trim();
-            const tanggal = document.getElementById('tanggalTopUp').value;
-            
-            const jumlah_top_up = jenis_transaksi === 'baru' ? nominal - HARGA_JUAL_KARTU : nominal;
-            const keuntungan_kartu = jenis_transaksi === 'baru' ? KEUNTUNGAN_PER_KARTU : 0;
-
-            const insertData = {
-                nama_wbp,
-                nomor_brizzi,
-                jenis_transaksi,
-                tanggal,
-                jumlah_top_up,
-                keuntungan_kartu
-            };
-
-            const client = getSupabaseClient();
-
-            try {
-                if (!client) {
-                    insertData.id = Date.now();
-                    transactions.unshift(insertData);
-                    localStorage.setItem('brizzi_local_backup', JSON.stringify(transactions));
-                    renderDashboard();
-                } else {
-                    const { data, error } = await client
-                        .from('brizzi_transactions')
-                        .insert([insertData]);
-
-                    if (error) throw error;
-                    await fetchDataFromSupabase();
-                }
-                closeModal('inputModal');
-            } catch (error) {
-                console.error("Gagal menyimpan:", error.message);
-                alert("Error: " + error.message);
-            } finally {
-                btnSubmit.disabled = false;
-                document.getElementById('form-loader').classList.add('hidden');
-            }
-        }
-
-        function setupRealtimeSubscription() {
-            const client = getSupabaseClient();
-            if (!client) return;
-            try {
-                client.channel('custom-all-channel')
-                    .on('postgres_changes', { event: '*', schema: 'public', table: 'brizzi_transactions' }, (payload) => {
-                        fetchDataFromSupabase();
-                    })
-                    .subscribe();
-            } catch(e) {}
-        }
-
-        // --- RENDER ANTARMUKA ---
-        function renderDashboard() {
-            let totalKartuTerjual = 0;
-            let totalTopUpBersih = 0;
-            let totalKeuntungan = 0;
-
-            const tbody = document.getElementById('table-body');
-            const emptyState = document.getElementById('empty-state');
-            tbody.innerHTML = '';
-
-            if (transactions.length === 0) {
-                emptyState.classList.remove('hidden');
-                emptyState.classList.add('flex');
-            } else {
-                emptyState.classList.add('hidden');
-                emptyState.classList.remove('flex');
-                
-                transactions.forEach(t => {
-                    if (t.jenis_transaksi === 'baru') {
-                        totalKartuTerjual++;
-                    }
-                    totalTopUpBersih += Number(t.jumlah_top_up || 0);
-                    totalKeuntungan += Number(t.keuntungan_kartu || 0);
-
-                    const row = document.createElement('tr');
-                    row.className = 'hover:bg-slate-50 transition border-b border-slate-50';
-                    row.innerHTML = `
-                        <td class="py-4 px-6">${t.tanggal}</td>
-                        <td class="py-4 px-6 font-medium text-slate-900">${t.nama_wbp}</td>
-                        <td class="py-4 px-6 font-mono text-slate-600 tracking-wide">${t.nomor_brizzi}</td>
-                        <td class="py-4 px-6">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                t.jenis_transaksi === 'baru' ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            }">
-                                ${t.jenis_transaksi === 'baru' ? 'Kartu Baru' : 'Top Up Lama'}
-                            </span>
-                        </td>
-                        <td class="py-4 px-6 text-right font-medium">${formatRupiah(t.jumlah_top_up)}</td>
-                        <td class="py-4 px-6 text-right text-emerald-600 font-medium">+${formatRupiah(t.keuntungan_kartu || 0)}</td>
-                    `;
-                    tbody.appendChild(row);
-                });
-            }
-
-            document.getElementById('stat-kartu-terjual').innerText = totalKartuTerjual;
-            document.getElementById('stat-total-topup').innerText = formatRupiah(totalTopUpBersih);
-            document.getElementById('stat-profit').innerText = formatRupiah(totalKeuntungan);
-        }
-
-        // --- SISTEM CETAK PDF ---
-        function generatePDF(reportType) {
-            closeModal('printModal');
-            
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            const currentDate = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-            doc.setFontSize(16);
-            doc.setFont("helvetica", "bold");
-            doc.text("KOPERASI / KANTIN LAPAS", 105, 15, { align: "center" });
-            doc.setFontSize(12);
-            doc.setFont("helvetica", "normal");
-            doc.text(`Tanggal Cetak: ${currentDate}`, 105, 22, { align: "center" });
-            doc.setLineWidth(0.5);
-            doc.line(14, 26, 196, 26);
-
-            if (reportType === 'report1') {
-                doc.setFontSize(14);
-                doc.setFont("helvetica", "bold");
-                doc.text("DAFTAR KEPEMILIKAN NOMOR BRIZZI WBP", 105, 35, { align: "center" });
-
-                const tableData = transactions.map((t, index) => [
-                    index + 1, t.nama_wbp, t.nomor_brizzi, t.jenis_transaksi === 'baru' ? 'Beli Baru' : 'Lama'
-                ]);
-
-                doc.autoTable({
-                    startY: 40,
-                    head: [['No.', 'Nama WBP (Bin)', 'Nomor Kartu BRIZZI', 'Keterangan']],
-                    body: tableData,
-                    theme: 'grid',
-                    headStyles: { fillColor: [41, 128, 185], halign: 'center' }
-                });
-
-                doc.save('Daftar_Nomor_BRIZZI_WBP.pdf');
-
-            } else if (reportType === 'report2') {
-                doc.setFontSize(14);
-                doc.setFont("helvetica", "bold");
-                doc.text("LAPORAN KEUANGAN TRANSAKSI BRIZZI", 105, 35, { align: "center" });
-
-                // Menghitung Metrik Keuangan
-                let totalKartuTerjual = 0;
-                let totalTopUpBersih = 0;
-                let totalKeuntunganKoperasi = 0;
-
-                transactions.forEach(t => {
-                    if (t.jenis_transaksi === 'baru') totalKartuTerjual++;
-                    totalTopUpBersih += Number(t.jumlah_top_up || 0);
-                    totalKeuntunganKoperasi += Number(t.keuntungan_kartu || 0);
-                });
-
-                // Rumus Pemisahan Dana
-                const totalBiayaModalKartu = totalKartuTerjual * HARGA_SETOR_KARTU_BRI; 
-                const grandTotalSetorBRI = totalBiayaModalKartu + totalTopUpBersih;
-
-                doc.setFontSize(11);
-                doc.setFont("helvetica", "normal");
-                doc.text(`A. Jumlah Kartu Baru Terjual: ${totalKartuTerjual} Kartu`, 14, 45);
-                doc.text(`B. Total Top Up Bersih (Masuk ke Saldo): ${formatRupiah(totalTopUpBersih)}`, 14, 52);
-                
-                doc.setFont("helvetica", "bold");
-                doc.setTextColor(39, 174, 96); // Hijau untuk Keuntungan
-                doc.text(`=> TOTAL KEUNTUNGAN KOPERASI: ${formatRupiah(totalKeuntunganKoperasi)}`, 14, 62);
-                
-                doc.setTextColor(41, 128, 185); // Biru untuk Setoran BRI
-                doc.text(`=> TOTAL SETOR KE BANK BRI: ${formatRupiah(grandTotalSetorBRI)}`, 14, 69);
-                doc.setFontSize(9);
-                doc.setFont("helvetica", "normal");
-                doc.text(`   (Rincian Setor: Modal Kartu Rp ${totalBiayaModalKartu.toLocaleString('id-ID')} + Top Up Rp ${totalTopUpBersih.toLocaleString('id-ID')})`, 14, 75);
-
-                doc.setTextColor(0, 0, 0); // Reset Hitam
-
-                const tableData = transactions.map((t, index) => [
-                    index + 1, t.tanggal, t.nama_wbp, t.jenis_transaksi === 'baru' ? 'Baru' : 'Lama',
-                    formatRupiah(t.jumlah_top_up), formatRupiah(t.keuntungan_kartu || 0)
-                ]);
-
-                doc.autoTable({
-                    startY: 85,
-                    head: [['No.', 'Tanggal', 'Nama WBP', 'Jenis', 'Top Up Bersih', 'Untung Koperasi']],
-                    body: tableData,
-                    theme: 'grid',
-                    headStyles: { fillColor: [44, 62, 80], halign: 'center' },
-                    columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' } }
-                });
-
-                doc.save('Laporan_Keuangan_BRIZZI.pdf');
-            }
-        }
+        doc.save('Laporan_Keuangan_BRIZZI.pdf');
+    }
+}
     </script>
 </body>
 </html>
