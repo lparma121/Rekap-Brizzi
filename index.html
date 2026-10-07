@@ -414,9 +414,7 @@
                 inputNama.placeholder = "Contoh: Budi bin Santoso";
             }
 
-            const nominalInput = document.getElementById('nominalUang').value;
-            const nominal = nominalInput ? parseInt(nominalInput) : 0;
-            // ... (kode di bawahnya biarkan sama seperti aslinya)    
+            // MENGHAPUS DEKLARASI GANDA (Sudah diperbaiki)
             const nominalInput = document.getElementById('nominalUang').value;
             const nominal = nominalInput ? parseInt(nominalInput) : 0;
             
@@ -432,6 +430,7 @@
                 helperText.innerHTML = `<span class="text-emerald-600 font-medium">100% uang diserahkan masuk ke saldo Top Up</span>`;
             }
         }
+
         // --- FITUR WHATSAPP OPERATOR QLOLA ---
         function kirimWAQlola() {
             const noBrizzi = document.getElementById('nomorBrizzi').value.trim();
@@ -456,6 +455,7 @@
             const waURL = `https://wa.me/${nomorWA}?text=${encodedPesan}`;
             window.open(waURL, '_blank');
         }
+
         // --- FITUR PENCARIAN WBP OTOMATIS (AUTO-COMPLETE) ---
         function cariDataWbp() {
             const input = document.getElementById('namaWbp').value.toLowerCase();
@@ -517,6 +517,7 @@
                 sugestiBox.classList.add('hidden');
             }
         });
+
         // --- MANAJEMEN DATABASE ---
         async function fetchDataFromSupabase() {
             document.getElementById('table-loader').classList.remove('hidden');
