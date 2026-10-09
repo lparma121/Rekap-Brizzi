@@ -698,7 +698,6 @@ function renderDashboard() {
     document.getElementById('stat-profit').innerText = formatRupiah(totalKeuntungan);
 }
 
-// --- SISTEM CETAK PDF ---
 function generatePDF(reportType) {
     closeModal('printModal');
     
@@ -720,7 +719,19 @@ function generatePDF(reportType) {
         doc.setFont("helvetica", "bold");
         doc.text("DAFTAR KEPEMILIKAN NOMOR BRIZZI WBP", 105, 35, { align: "center" });
 
-        const tableData = transactions.map((t, index) => [
+        // LOGIKA PERBAIKAN 1: Filter Duplikasi Berdasarkan Nomor & Nama
+        const uniqueData = [];
+        const seen = new Set();
+        
+        transactions.forEach(t => {
+            const uniqueKey = `${t.nomor_brizzi}-${t.nama_wbp}`.toLowerCase();
+            if(!seen.has(uniqueKey)) {
+                seen.add(uniqueKey);
+                uniqueData.push(t);
+            }
+        });
+
+        const tableData = uniqueData.map((t, index) => [
             index + 1, t.nama_wbp, t.nomor_brizzi, t.jenis_transaksi === 'baru' ? 'Beli Baru' : 'Lama'
         ]);
 
@@ -735,15 +746,36 @@ function generatePDF(reportType) {
         doc.save('Daftar_Nomor_BRIZZI_WBP.pdf');
 
     } else if (reportType === 'report2') {
+        // LOGIKA PERBAIKAN 2: Tangkap Input Tanggal & Filter Data
+        const inputDate = document.getElementById('filterTanggalLaporan');
+        const filterDate = inputDate ? inputDate.value : '';
+        
+        let dataToPrint = transactions;
+        let subJudulTanggal = "(Semua Riwayat Transaksi)";
+        
+        if (filterDate) {
+            // Filter array berdasarkan tanggal persis
+            dataToPrint = transactions.filter(t => t.tanggal === filterDate);
+            
+            // Format ulang tanggal untuk judul PDF
+            const dateObj = new Date(filterDate);
+            const formattedFilterDate = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+            subJudulTanggal = `(Tanggal Rekap: ${formattedFilterDate})`;
+        }
+
         doc.setFontSize(14);
         doc.setFont("helvetica", "bold");
         doc.text("LAPORAN KEUANGAN TRANSAKSI BRIZZI", 105, 35, { align: "center" });
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "normal");
+        doc.text(subJudulTanggal, 105, 41, { align: "center" });
 
         let totalKartuTerjual = 0;
         let totalTopUpBersih = 0;
         let totalKeuntunganKoperasi = 0;
 
-        transactions.forEach(t => {
+        // Hitung ulang metrik KHUSUS untuk data yang sudah difilter
+        dataToPrint.forEach(t => {
             if (t.jenis_transaksi === 'baru') totalKartuTerjual++;
             totalTopUpBersih += Number(t.jumlah_top_up || 0);
             totalKeuntunganKoperasi += Number(t.keuntungan_kartu || 0);
@@ -752,38 +784,44 @@ function generatePDF(reportType) {
         const totalBiayaModalKartu = totalKartuTerjual * HARGA_SETOR_KARTU_BRI; 
         const grandTotalSetorBRI = totalBiayaModalKartu + totalTopUpBersih;
 
-        doc.setFontSize(11);
-        doc.setFont("helvetica", "normal");
-        doc.text(`A. Jumlah Kartu Baru Terjual: ${totalKartuTerjual} Kartu`, 14, 45);
-        doc.text(`B. Total Top Up Bersih (Masuk ke Saldo): ${formatRupiah(totalTopUpBersih)}`, 14, 52);
+        let startY = 50; 
+        doc.text(`A. Jumlah Kartu Baru Terjual: ${totalKartuTerjual} Kartu`, 14, startY);
+        doc.text(`B. Total Top Up Bersih (Masuk ke Saldo): ${formatRupiah(totalTopUpBersih)}`, 14, startY + 7);
         
         doc.setFont("helvetica", "bold");
         doc.setTextColor(39, 174, 96);
-        doc.text(`=> TOTAL KEUNTUNGAN KOPERASI: ${formatRupiah(totalKeuntunganKoperasi)}`, 14, 62);
+        doc.text(`=> TOTAL KEUNTUNGAN KOPERASI: ${formatRupiah(totalKeuntunganKoperasi)}`, 14, startY + 17);
         
         doc.setTextColor(41, 128, 185);
-        doc.text(`=> TOTAL SETOR KE BANK BRI: ${formatRupiah(grandTotalSetorBRI)}`, 14, 69);
+        doc.text(`=> TOTAL SETOR KE BANK BRI: ${formatRupiah(grandTotalSetorBRI)}`, 14, startY + 24);
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
-        doc.text(`   (Rincian Setor: Modal Kartu Rp ${totalBiayaModalKartu.toLocaleString('id-ID')} + Top Up Rp ${totalTopUpBersih.toLocaleString('id-ID')})`, 14, 75);
+        doc.text(`   (Rincian Setor: Modal Kartu Rp ${totalBiayaModalKartu.toLocaleString('id-ID')} + Top Up Rp ${totalTopUpBersih.toLocaleString('id-ID')})`, 14, startY + 30);
 
         doc.setTextColor(0, 0, 0);
 
-        const tableData = transactions.map((t, index) => [
-            index + 1, t.tanggal, t.nama_wbp, t.jenis_transaksi === 'baru' ? 'Baru' : 'Lama',
-            formatRupiah(t.jumlah_top_up), formatRupiah(t.keuntungan_kartu || 0)
-        ]);
+        if (dataToPrint.length === 0) {
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "italic");
+            doc.text("Tidak ada transaksi pada tanggal tersebut.", 105, startY + 45, { align: "center" });
+        } else {
+            const tableData = dataToPrint.map((t, index) => [
+                index + 1, t.tanggal, t.nama_wbp, t.jenis_transaksi === 'baru' ? 'Baru' : 'Lama',
+                formatRupiah(t.jumlah_top_up), formatRupiah(t.keuntungan_kartu || 0)
+            ]);
 
-        doc.autoTable({
-            startY: 85,
-            head: [['No.', 'Tanggal', 'Nama WBP', 'Jenis', 'Top Up Bersih', 'Untung Koperasi']],
-            body: tableData,
-            theme: 'grid',
-            headStyles: { fillColor: [44, 62, 80], halign: 'center' },
-            columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' } }
-        });
+            doc.autoTable({
+                startY: startY + 40,
+                head: [['No.', 'Tanggal', 'Nama WBP', 'Jenis', 'Top Up Bersih', 'Untung Koperasi']],
+                body: tableData,
+                theme: 'grid',
+                headStyles: { fillColor: [44, 62, 80], halign: 'center' },
+                columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' } }
+            });
+        }
 
-        doc.save('Laporan_Keuangan_BRIZZI.pdf');
+        const fileNameDate = filterDate ? `_${filterDate}` : '';
+        doc.save(`Laporan_Keuangan_BRIZZI${fileNameDate}.pdf`);
     }
 }
     </script>
